@@ -21,6 +21,8 @@
   vars:
     migrate_db: "yes"
     openid_workaround: True
+  vars_files:
+    - "{{ secure_dir }}/vars/edxapp_vars.yml"
   roles:
     - common
     - supervisor
@@ -29,8 +31,6 @@
       - lms
       - cms
       - lms-preview
-      - xqueue
-      - ora
     - edxlocal
     - mongo
     - edxapp
@@ -39,5 +39,3 @@
     - oraclejdk
     - elasticsearch
     - forum
-    - { role: "xqueue", update_users: True }
-    - ora

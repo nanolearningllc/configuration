@@ -198,7 +198,7 @@ lms_preview_auth_config:
 
 lms_preview_env_config:
   <<: *lms_env
-  'SITE_NAME':  'preview.class.stanford.edu'
+  'SITE_NAME':  'preview.applied.nanolearning.me'
   'COMMENTS_SERVICE_KEY':  false
   'CACHES': 
     <<: *lms_caches

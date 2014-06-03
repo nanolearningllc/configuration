@@ -1,6 +1,11 @@
 #Variables for rabbitmq
 ---
 
+rabbit_app_dir: "{{ COMMON_APP_DIR }}/rabbitmq"
+rabbit_data_dir: "{{ COMMON_DATA_DIR }}/rabbitmq"
+rabbit_log_dir: "{{ COMMON_LOG_DIR }}/rabbitmq"
+rabbit_cfg_dir: "{{ COMMON_CFG_DIR }}/rabbitmq"
+
 # Environment specific vars
 RABBIT_ERLANG_COOKIE: 'DEFAULT_COOKIE'
 RABBIT_USERS:
@@ -13,6 +18,9 @@ RABBIT_USERS:
 
 RABBITMQ_CLUSTERED: !!null
 
+RABBITMQ_VHOSTS:
+  - '/'
+
 # Internal role variables below this line
 
 # option to force deletion of the mnesia dir
@@ -20,9 +28,15 @@ rabbitmq_refresh: false
 
 rabbitmq_apt_key: "http://www.rabbitmq.com/rabbitmq-signing-key-public.asc"
 rabbitmq_repository: "deb http://www.rabbitmq.com/debian/ testing main"
+# We mirror the deb package for rabbitmq-server because
+# nodes need to be running the same version
+rabbitmq_pkg_url: "http://files.edx.org/rabbitmq_packages/rabbitmq-server_3.2.3-1_all.deb"
 rabbitmq_pkg: "rabbitmq-server"
 rabbitmq_debian_pkgs:
   - python-software-properties
+  # for installing the deb package with
+  # dependencies
+  - gdebi
 
 rabbitmq_config_dir: "/etc/rabbitmq"
 rabbitmq_cookie_dir: "/var/lib/rabbitmq"
@@ -38,11 +52,6 @@ rabbitmq_ip: "{{ ansible_default_ipv4.address }}"
 rabbitmq_auth_config:
   erlang_cookie: $RABBIT_ERLANG_COOKIE
   admins: $RABBIT_USERS
-
-# If the system is running out of an Amazon Web Services
-# cloudformation stack, this group name can used to pull out
-# the name of the stack the rabbit server resides in.
-rabbitmq_aws_stack_name: "tag_aws_cloudformation_stack-name_"
 
 rabbitmq_clustered_hosts: []
 

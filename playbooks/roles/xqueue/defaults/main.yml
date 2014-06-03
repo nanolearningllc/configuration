@@ -2,22 +2,6 @@
 # when the role is included
 ---
 XQUEUE_NGINX_PORT: 18040
-XQUEUE_BASIC_AUTH: False
-
-xqueue_app_dir: "{{ COMMON_APP_DIR }}/xqueue"
-xqueue_code_dir: "{{ xqueue_app_dir }}/xqueue"
-xqueue_data_dir: "{{ COMMON_DATA_DIR }}/xqueue"
-xqueue_venvs_dir: "{{ xqueue_app_dir }}/venvs"
-xqueue_venv_dir: "{{ xqueue_venvs_dir }}/xqueue"
-xqueue_venv_bin: "{{ xqueue_venv_dir }}/bin"
-xqueue_user: "xqueue"
-
-# Default nginx listen port
-# These should be overrided if you want
-# to serve all content on port 80
-xqueue_gunicorn_port: 8040
-xqueue_gunicorn_host: 127.0.0.1
-
 XQUEUE_QUEUES:
   # push queue
   'edX-Open_DemoX': 'http://localhost:18050'
@@ -34,18 +18,35 @@ XQUEUE_AWS_ACCESS_KEY_ID : ''
 XQUEUE_AWS_SECRET_ACCESS_KEY : ''
 XQUEUE_BASIC_AUTH_USER: 'edx'
 XQUEUE_BASIC_AUTH_PASSWORD: 'edx'
-XQUEUE_DJANGO_USER: 'lms'
-XQUEUE_DJANGO_PASSWORD: 'password'
+XQUEUE_DJANGO_USERS:
+  lms: 'password'
 XQUEUE_RABBITMQ_USER: 'edx'
 XQUEUE_RABBITMQ_PASS: 'edx'
 XQUEUE_RABBITMQ_HOSTNAME: 'localhost'
 XQUEUE_LANG: 'en_US.UTF-8'
 
 XQUEUE_MYSQL_DB_NAME: 'xqueue'
-XQUEUE_MYSQL_USER: 'root'
-XQUEUE_MYSQL_PASSWORD: ''
+XQUEUE_MYSQL_USER: 'xqueue001'
+XQUEUE_MYSQL_PASSWORD: 'password'
 XQUEUE_MYSQL_HOST: 'localhost'
 XQUEUE_MYSQL_PORT: '3306'
+
+# Internal vars below this line
+#############################################
+
+xqueue_app_dir: "{{ COMMON_APP_DIR }}/xqueue"
+xqueue_code_dir: "{{ xqueue_app_dir }}/xqueue"
+xqueue_data_dir: "{{ COMMON_DATA_DIR }}/xqueue"
+xqueue_venvs_dir: "{{ xqueue_app_dir }}/venvs"
+xqueue_venv_dir: "{{ xqueue_venvs_dir }}/xqueue"
+xqueue_venv_bin: "{{ xqueue_venv_dir }}/bin"
+xqueue_user: "xqueue"
+
+# Default nginx listen port
+# These should be overrided if you want
+# to serve all content on port 80
+xqueue_gunicorn_port: 8040
+xqueue_gunicorn_host: 127.0.0.1
 
 xqueue_env_config:
   XQUEUES: $XQUEUE_QUEUES
@@ -62,7 +63,7 @@ xqueue_auth_config:
   AWS_ACCESS_KEY_ID:  $XQUEUE_AWS_ACCESS_KEY_ID
   AWS_SECRET_ACCESS_KEY: $XQUEUE_AWS_SECRET_ACCESS_KEY
   REQUESTS_BASIC_AUTH: [$XQUEUE_BASIC_AUTH_USER, $XQUEUE_BASIC_AUTH_PASSWORD]
-  USERS: { '{{XQUEUE_DJANGO_USER}}' : $XQUEUE_DJANGO_PASSWORD }
+  USERS: $XQUEUE_DJANGO_USERS
   DATABASES:
     default:
       ENGINE: "django.db.backends.mysql"
@@ -74,7 +75,6 @@ xqueue_auth_config:
   RABBITMQ_USER: $XQUEUE_RABBITMQ_USER
   RABBITMQ_PASS: $XQUEUE_RABBITMQ_PASS
 
-xqueue_create_db: 'yes'
 xqueue_source_repo: https://github.com/edx/xqueue.git
 xqueue_version: 'HEAD'
 xqueue_pre_requirements_file:    "{{ xqueue_code_dir }}/pre-requirements.txt"

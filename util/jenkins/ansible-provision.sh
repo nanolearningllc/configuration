@@ -3,7 +3,7 @@
 # Ansible provisioning wrapper script that
 # assumes the following parameters set
 # as environment variables
-# 
+#
 # - github_username
 # - server_type
 # - instance_type
@@ -18,13 +18,18 @@
 # - environment
 # - name_tag
 
+export PYTHONUNBUFFERED=1
 export BOTO_CONFIG=/var/lib/jenkins/${aws_account}.boto
 
 if [[ -z $WORKSPACE ]]; then
     dir=$(dirname $0)
     source "$dir/ascii-convert.sh"
 else
-    source "$WORKSPACE/util/jenkins/ascii-convert.sh"
+    source "$WORKSPACE/configuration/util/jenkins/ascii-convert.sh"
+fi
+
+if [[ -z $static_url_base ]]; then
+  static_url_base="/static"
 fi
 
 if [[ -z $github_username  ]]; then
@@ -36,7 +41,26 @@ if [[ ! -f $BOTO_CONFIG ]]; then
   exit 1
 fi
 
-extra_vars="/var/tmp/extra-vars-$$.yml"
+extra_vars_file="/var/tmp/extra-vars-$$.yml"
+extra_var_arg="-e@${extra_vars_file}"
+
+if [[ $edx_internal == "true" ]]; then
+    # if this is a an edx server include
+    # the secret var file
+    extra_var_arg="-e@${extra_vars_file} -e@${WORKSPACE}/configuration-secure/ansible/vars/developer-sandbox.yml"
+fi
+
+if [[ -z $region ]]; then
+  region="us-east-1"
+fi
+
+if [[ -z $zone ]]; then
+  zone="us-east-1b"
+fi
+
+if [[ -z $elb ]]; then
+  elb="false"
+fi
 
 if [[ -z $dns_name ]]; then
   dns_name=$github_username
@@ -48,85 +72,142 @@ fi
 
 if [[ -z $ami ]]; then
   if [[ $server_type == "full_edx_installation" ]]; then
-    ami="ami-81e0c5e8"
-  elif [[ $server_type == "ubuntu_12.04" ]]; then
-    ami="ami-d0f89fb9"
+    ami="ami-97dbc3fe"
+  elif [[ $server_type == "ubuntu_12.04" || $server_type == "full_edx_installation_from_scratch" ]]; then
+    ami="ami-59a4a230"
   fi
 fi
 
 if [[ -z $instance_type ]]; then
-  if [[ $server_type == "full_edx_installation" ]]; then
-    instance_type="m1.medium"
-  elif [[ $server_type == "ubuntu_12.04" ]]; then
-    instance_type="m1.small"
-  fi
-
+  instance_type="m3.medium"
 fi
 
 deploy_host="${dns_name}.${dns_zone}"
 ssh-keygen -f "/var/lib/jenkins/.ssh/known_hosts" -R "$deploy_host"
 
-if [[ -z $WORKSPACE ]]; then
-    dir=$(dirname $0)
-    source "$dir/ascii-convert.sh"
-else
-    source "$WORKSPACE/util/jenkins/create-var-file.sh"
+cd playbooks/edx-east
+
+cat << EOF > $extra_vars_file
+---
+ansible_ssh_private_key_file: /var/lib/jenkins/${keypair}.pem
+edx_platform_version: $edxapp_version
+forum_version: $forum_version
+xqueue_version: $xqueue_version
+xserver_version: $xserver_version
+ora_version: $ora_version
+ease_version: $ease_version
+certs_version: $certs_version
+discern_version: $discern_version
+EDXAPP_STATIC_URL_BASE: $static_url_base
+EDXAPP_LMS_NGINX_PORT: 80
+EDXAPP_LMS_PREVIEW_NGINX_PORT: 80
+EDX_ANSIBLE_DUMP_VARS: true
+migrate_db: "yes"
+openid_workaround: True
+rabbitmq_ip: "127.0.0.1"
+rabbitmq_refresh: True
+COMMON_HOSTNAME: edx-server
+COMMON_DEPLOYMENT: edx
+COMMON_ENVIRONMENT: sandbox
+
+# User provided extra vars
+$extra_vars
+EOF
+
+if [[ $basic_auth == "true" ]]; then
+
+    cat << EOF_AUTH >> $extra_vars_file
+NGINX_HTPASSWD_USER: $auth_user
+NGINX_HTPASSWD_PASS: $auth_pass
+EOF_AUTH
 fi
 
-cd playbooks/edx-east
 
 if [[ $recreate == "true" ]]; then
     # vars specific to provisioning added to $extra-vars
-    cat << EOF >> $extra_vars
+    cat << EOF >> $extra_vars_file
 dns_name: $dns_name
 keypair: $keypair
 instance_type: $instance_type
 security_group: $security_group
 ami: $ami
 region: $region
-instance_tags: '{"environment": "$environment", "github_username": "$github_username", "Name": "$name_tag", "source": "jenkins", "owner": "$BUILD_USER"}'
+zone: $zone
+instance_tags:
+    environment: $environment
+    github_username: $github_username
+    Name: $name_tag
+    source: jenkins
+    owner: $BUILD_USER
+    datadog: monitored
 root_ebs_size: $root_ebs_size
 name_tag: $name_tag
-gh_users:
-  - ${github_username}
 dns_zone: $dns_zone
 rabbitmq_refresh: True
-GH_USERS_PROMPT: '[$name_tag] '
+elb: $elb
 EOF
-    cat $extra_vars
+
+    if [[ $edx_internal == "true" ]]; then
+        # if this isn't a public server add the github
+        # user and set edx_internal to True so that
+        # xserver is installed
+        cat << EOF >> $extra_vars_file
+EDXAPP_PREVIEW_LMS_BASE: preview.${deploy_host}
+EDXAPP_LMS_BASE: ${deploy_host}
+EDXAPP_CMS_BASE: studio.${deploy_host}
+EDXAPP_SITE_NAME: ${deploy_host}
+CERTS_DOWNLOAD_URL: "http://${deploy_host}:18090"
+CERTS_VERIFY_URL: "http://${deploy_host}:18090"
+edx_internal: True
+COMMON_USER_INFO:
+  - name: ${github_username}
+    github: true
+    type: admin
+USER_CMD_PROMPT: '[$name_tag] '
+EOF
+    fi
+
+
     # run the tasks to launch an ec2 instance from AMI
-    ansible-playbook edx_provision.yml  -i inventory.ini -e "@${extra_vars}"  --user ubuntu
+    cat $extra_vars_file
+    ansible-playbook edx_provision.yml  -i inventory.ini $extra_var_arg --user ubuntu  -v
 
     if [[ $server_type == "full_edx_installation" ]]; then
         # additional tasks that need to be run if the
         # entire edx stack is brought up from an AMI
-        ansible-playbook deploy_rabbitmq.yml -i "${deploy_host}," -e "@${extra_vars}" --user ubuntu
-        ansible-playbook restart_supervisor.yml -i "${deploy_host}," -e "@${extra_vars}" --user ubuntu
+        ansible-playbook rabbitmq.yml -i "${deploy_host}," $extra_var_arg --user ubuntu
+        ansible-playbook restart_supervisor.yml -i "${deploy_host}," $extra_var_arg --user ubuntu
     fi
 fi
 
 declare -A deploy
-
-deploy[edxapp]=$edxapp
-deploy[forum]=$forum
-deploy[xqueue]=$xqueue
-deploy[xserver]=$xserver
-deploy[ora]=$ora
-deploy[discern]=$discern
-deploy[certs]=$certs
-
-
-# If reconfigure was selected run non-deploy tasks for all roles
-if [[ $reconfigure == "true" ]]; then
-    ansible-playbook edx_continuous_integration.yml -i "${deploy_host}," -e "@${extra_vars}" --user ubuntu --skip-tags deploy
-fi
-
-# Run deploy tasks for the roles selected
-for i in "${!deploy[@]}"; do
-    if [[ ${deploy[$i]} == "true" ]]; then
-        ansible-playbook deploy_${i}.yml -i "${deploy_host}," -e "@${extra_vars}" --user ubuntu --tags deploy
-    fi
+roles="edxapp forum xqueue xserver ora discern certs demo"
+for role in $roles; do
+    deploy[$role]=${!role}
 done
 
+# If reconfigure was selected or if starting from an ubuntu 12.04 AMI
+# run non-deploy tasks for all roles
+if [[ $reconfigure == "true" || $server_type == "full_edx_installation_from_scratch" ]]; then
+    cat $extra_vars_file
+    ansible-playbook edx_continuous_integration.yml -i "${deploy_host}," $extra_var_arg --user ubuntu 
+fi
 
-rm -f "$extra_vars"
+
+if [[ $server_type == "full_edx_installation" ]]; then
+    # Run deploy tasks for the roles selected
+    for i in $roles; do
+        if [[ ${deploy[$i]} == "true" ]]; then
+            cat $extra_vars_file
+            ansible-playbook ${i}.yml -i "${deploy_host}," $extra_var_arg --user ubuntu --tags deploy -v
+        fi
+    done
+fi
+
+# deploy the edx_ansible role
+ansible-playbook edx_ansible.yml -i "${deploy_host}," $extra_var_arg --user ubuntu
+
+# set the hostname
+ansible-playbook set_hostname.yml -i "${deploy_host}," -e hostname_fqdn=${deploy_host} --user ubuntu
+
+rm -f "$extra_vars_file"

@@ -1,5 +1,7 @@
 ---
-- name: common | restart rsyslogd
+- name: restart rsyslogd
   service: name=rsyslog state=restarted
   sudo: True
-  tags: deploy
+- name: restart ssh
+  service: name=ssh state=restarted
+  sudo: True

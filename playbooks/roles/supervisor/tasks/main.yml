@@ -50,30 +50,32 @@
 #    supervisor_service: upstart-service-name
 #
 ---
-- name: supervisor | create application user
+- name: create application user
   user: >
     name="{{ supervisor_user }}"
     createhome=no
     shell=/bin/false
 
-- name: supervisor | create supervisor service user
+- name: create supervisor service user
   user: >
     name="{{ supervisor_service_user }}"
     createhome=no
     shell=/bin/false
 
-- name: supervisor | create supervisor directories
+- name: create supervisor directories
   file: >
     name={{ item }}
     state=directory
     owner={{ supervisor_user }}
     group={{ supervisor_service_user }}
+    mode="755"
   with_items:
     - "{{ supervisor_app_dir }}"
     - "{{ supervisor_venv_dir }}"
     - "{{ supervisor_cfg_dir }}"
+    - "{{ supervisor_available_dir }}"
 
-- name: supervisor | create supervisor directories
+- name: create supervisor directories
   file: >
     name={{ item }}
     state=directory
@@ -84,29 +86,56 @@
     - "{{ supervisor_log_dir }}"
 
 
-- name: supervisor | install supervisor in its venv
-  pip: name=supervisor virtualenv="{{supervisor_venv_dir}}" state=present
+- name: install supervisor in its venv
+  pip: >
+    name=supervisor virtualenv="{{supervisor_venv_dir}}" state=present
+    extra_args="-i {{ COMMON_PYPI_MIRROR_URL }}"
   sudo_user: "{{ supervisor_user }}"
 
-- name: supervisor | create supervisor upstart job
+- name: install supervisor in its venv
+  pip: >
+    name=boto virtualenv="{{supervisor_venv_dir}}" state=present
+    extra_args="-i {{ COMMON_PYPI_MIRROR_URL }}"
+  sudo_user: "{{ supervisor_user }}"
+  when: supervisor_service == "supervisor" and disable_edx_services and not devstack
+
+- name: create supervisor upstart job
   template: >
-    src=supervisor-upstart.conf.j2 dest=/etc/init/{{ supervisor_service }}.conf
+    src=etc/init/supervisor-upstart.conf.j2 dest=/etc/init/{{ supervisor_service }}.conf
     owner=root group=root
 
-- name: supervisor | create supervisor master config
+# This script is aws specific and looks up instances
+# tags and enables services based on the 'services' tag
+# on instance startup.
+- name: create pre_supervisor upstart job
   template: >
-    src=supervisord.conf.j2 dest={{ supervisor_cfg }}
+    src=etc/init/pre_supervisor.conf.j2 dest=/etc/init/pre_supervisor.conf
+    owner=root group=root
+  when: supervisor_service == "supervisor" and disable_edx_services and not devstack
+
+- name: write the pre_suprevisor python script
+  copy: >
+    src=pre_supervisor_checks.py 
+    dest={{ supervisor_app_dir }}/pre_supervisor_checks.py
+    mode=0750
+    owner={{ supervisor_user }}
+    group={{ supervisor_service_user }}
+  when: disable_edx_services
+
+- name: create supervisor master config
+  template: >
+    src=edx/app/supervisor/supervisord.conf.j2 dest={{ supervisor_cfg }}
     owner={{ supervisor_user }} group={{ supervisor_service_user }}
     mode=0644
 
-- name: supervisor | create a symlink for supervisortctl
+- name: create a symlink for supervisortctl
   file: >
     src={{ supervisor_ctl }}
     dest={{ COMMON_BIN_DIR }}/{{ supervisor_ctl|basename }}
     state=link
   when: supervisor_service == "supervisor"
 
-- name: supervisor | create a symlink for supervisor cfg
+- name: create a symlink for supervisor cfg
   file: >
     src={{ item }}
     dest={{ COMMON_CFG_DIR }}/{{ item|basename }}
@@ -116,7 +145,7 @@
   - "{{ supervisor_cfg }}"
   - "{{ supervisor_cfg_dir }}"
 
-- name: supervisor | start supervisor
+- name: start supervisor
   service: >
     name={{supervisor_service}}
     state=started
@@ -124,7 +153,7 @@
 
   # calling update on supervisor too soon after it
   # starts will result in an errror.
-- name: supervisor | wait for web port to be available
+- name: wait for web port to be available
   wait_for: port={{ supervisor_http_bind_port }} timeout=5
   when: start_supervisor.changed
 
@@ -134,7 +163,7 @@
   # we don't use notifications for supervisor because
   # they don't work well with parameterized roles.
   # See https://github.com/ansible/ansible/issues/4853
-- name: supervisor | update supervisor configuration
+- name: update supervisor configuration
   shell:  "{{ supervisor_ctl }} -c {{ supervisor_cfg }} update"
   register: supervisor_update
   changed_when: supervisor_update.stdout != ""

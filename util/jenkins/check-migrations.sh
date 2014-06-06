@@ -30,13 +30,14 @@ if [[ -f ${WORKSPACE}/configuration-secure/ansible/vars/${environment}.yml ]]; t
 fi
 
 extra_var_args+="-e@${WORKSPACE}/configuration-secure/ansible/vars/${environment}-${deployment}.yml"
+extra_var_args+="-e edxapp_app_dir=${WORKSPACE}"
+extra_var_args+="-e edxapp_user=jenkins"
 
-ansible-playbook -c local $extra_var_args -e edxapp_user=jenkins -e edxapp_app_dir=${WORKSPACE} --tags edxapp_cfg -i localhost, -s -U jenkins edxapp.yml
+# Generate the json configuration files
+ansible-playbook -c local $extra_var_args --tags edxapp_cfg -i localhost, -s -U jenkins edxapp.yml
 
-cd $WORKSPACE/edx-platform
-
-#if [ $dry_run = "true" ]; then
-#  db_dry_run="--db-dry-run"
-#fi
+if [[ $dry_run == "true" ]]; then
+  db_dry_run="--db-dry-run"
+fi
 
 #$migration_cmd $db_dry_run

@@ -31,11 +31,10 @@ fi
 
 extra_var_args+="-e@${WORKSPACE}/configuration-secure/ansible/vars/${environment}-${deployment}.yml"
 
-ansible_cmd="ansible-playbook -c local $extra_var_args -e edxapp_user=jenkins -e edxapp_app_dir=${WORKSPACE} --tags edxapp_cfg -i localhost, -s -U jenkins edxapp.yml"
+ansible-playbook -c local $extra_var_args -e edxapp_user=jenkins -e edxapp_app_dir=${WORKSPACE} --tags edxapp_cfg -i localhost, -s -U jenkins edxapp.yml
 
 cd $WORKSPACE/edx-platform
 
-$ansible_cmd
 #if [ $dry_run = "true" ]; then
 #  db_dry_run="--db-dry-run"
 #fi

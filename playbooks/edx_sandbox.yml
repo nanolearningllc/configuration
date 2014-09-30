@@ -18,6 +18,7 @@
     ENABLE_SPLUNKFORWARDER: False
     ENABLE_NEWRELIC: False
   roles:
+    - security
     - role: nginx
       nginx_sites:
       - cms
